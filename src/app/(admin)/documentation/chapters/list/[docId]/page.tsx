@@ -51,11 +51,6 @@ export default function ChapterListStep() {
     router.push("/solicitations"); // nova tab de Solicitações de registro
   };
 
-  // Função do futuro step de pagamento
-  const handleGoToPayment = () => {
-    router.push(`/documentation/payment/${requestId}`); // Step ainda não implementado
-  };
-
   return (
     <WizardLayout
       title="Listagem de Capítulos"
@@ -64,7 +59,6 @@ export default function ChapterListStep() {
       customActions={
         <button
           className="btn btn-warning ms-2"
-          onClick={handleGoToPayment}
         >
           Enviar ao crossref
         </button>
