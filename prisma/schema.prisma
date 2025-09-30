@@ -440,6 +440,16 @@ model DocumentationChapterAuthor {
   @@map("DOCUMENTATION_CHAPTER_AUTHOR")
 }
 
+model UserDocumentationCredit {
+  id      Int @id @default(autoincrement())
+  userId  Int @unique
+  credits Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_documentation_credit")
+}
+
 model DocumentationStatus {
   id   Int    @id @default(autoincrement())
   name String @db.VarChar(50)

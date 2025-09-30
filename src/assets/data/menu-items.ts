@@ -13,27 +13,21 @@ export const MENU_ITEMS: MenuItemType[] = [
   },
   {
     key: 'magazine',
-    label: 'Produtos',
+    label: 'Revistas',
     icon: 'ri:survey-line',
     children: [
       {
-        key: 'basic',
-        label: 'Listar produtos',
-        url: '/produtos',
+        key: 'editais-abertos',
+        label: 'Editais Abertos',
+        url: '/magazine/submission-page',
+        parentKey: 'magazine',
+      },
+      {
+        key: 'meus-trabalhos',
+        label: 'Meus Trabalhos',
+        url: '/magazine/submission-list',
         parentKey: 'magazine',
       }
-      // {
-      //   key: 'basic',
-      //   label: 'Nova revista',
-      //   url: '/magazine/form',
-      //   parentKey: 'magazine',
-      // },
-      // {
-      //   key: 'basic',
-      //   label: 'Submissões',
-      //   url: '/magazine/submission-list',
-      //   parentKey: 'magazine',
-      // },
     ]
   },
   {
