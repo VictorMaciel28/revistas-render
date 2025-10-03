@@ -11,6 +11,8 @@ interface Request {
   edition: number;
   isbn: string | null;
   created_at: string;
+  status?: number;
+  statusName?: string | null;
 }
 
 interface PaymentCheckResult {
@@ -34,9 +36,13 @@ export default function RequestList() {
   const [userCredits, setUserCredits] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showRechargeModal, setShowRechargeModal] = useState(false);
+  const [paymentStatus, setPaymentStatus] = useState<null | { status: string; motive?: string | null; planCredits?: number; planPrice?: number }>(null);
+  const [showPaymentStatusModal, setShowPaymentStatusModal] = useState(false);
   const [paymentData, setPaymentData] = useState<PaymentCheckResult | null>(null);
   const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [paymentProof, setPaymentProof] = useState<File | null>(null);
+  const [selectedPlanCredits, setSelectedPlanCredits] = useState<number | null>(null);
+  const [selectedPlanPrice, setSelectedPlanPrice] = useState<number | null>(null);
 
   useEffect(() => {
     fetchRequests();
@@ -49,6 +55,13 @@ export default function RequestList() {
       if (res.ok) {
         const data = await res.json();
         setUserCredits(data.credits);
+        try {
+          const p = await fetch('/api/user/last-payment-status');
+          if (p.ok) {
+            const pj = await p.json();
+            setPaymentStatus(pj || null);
+          }
+        } catch {}
       }
     } catch (err) {
       console.error("Erro ao buscar créditos:", err);
@@ -112,15 +125,38 @@ export default function RequestList() {
     if (!selectedRequestId || !paymentData) return;
 
     try {
-      // Aqui você implementaria a lógica de pagamento
-      // Por enquanto, apenas mostra uma confirmação
-      alert(`Pagamento confirmado! ${paymentData.creditsNeeded} créditos serão debitados.`);
+      // Debitar créditos necessários
+      const debitRes = await fetch('/api/user/debit-credits', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: paymentData.creditsNeeded })
+      })
+      if (!debitRes.ok) {
+        const t = await debitRes.text().catch(() => '')
+        throw new Error(t || 'Falha ao debitar créditos')
+      }
+      alert(`Pagamento confirmado! ${paymentData.creditsNeeded} créditos foram debitados.`);
       
       // Atualiza os créditos do usuário
       await fetchUserCredits();
       setShowPaymentModal(false);
       setPaymentData(null);
       setSelectedRequestId(null);
+
+      // Disparo da geração/envio de XML para CrossRef (ambiente de teste)
+      try {
+        const r = await fetch('/api/documentation/crossref-submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: selectedRequestId })
+        })
+        if (!r.ok) {
+          const txt = await r.text().catch(() => '')
+          console.warn('Falha ao enviar para CrossRef:', txt)
+        }
+      } catch (e) {
+        console.warn('Erro na chamada CrossRef:', e)
+      }
     } catch (err) {
       console.error(err);
       alert("Erro ao processar pagamento");
@@ -135,6 +171,8 @@ export default function RequestList() {
     };
 
     const price = prices[credits as keyof typeof prices];
+    setSelectedPlanCredits(credits);
+    setSelectedPlanPrice(price);
     window.open(`https://pagseguro.com.br?credits=${credits}&price=${price}`, '_blank');
   }
 
@@ -143,15 +181,36 @@ export default function RequestList() {
       alert("Selecione um comprovante de pagamento");
       return;
     }
+    if (!selectedPlanCredits || !selectedPlanPrice) {
+      alert("Selecione um plano de recarga");
+      return;
+    }
 
     try {
       const formData = new FormData();
       formData.append('proof', paymentProof);
-      
-      // Aqui você implementaria o upload do comprovante
+      if (selectedRequestId) {
+        formData.append('requestId', selectedRequestId);
+      }
+      formData.append('planCredits', String(selectedPlanCredits));
+      formData.append('planPrice', String(selectedPlanPrice));
+
+      const res = await fetch('/api/documentation/payment-proof', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Falha no upload' }));
+        throw new Error(err.error || 'Erro ao enviar comprovante');
+      }
+
       alert("Comprovante enviado com sucesso! Aguarde a análise.");
       setShowRechargeModal(false);
       setPaymentProof(null);
+      setSelectedPlanCredits(null);
+      setSelectedPlanPrice(null);
+      await fetchRequests();
     } catch (err) {
       console.error(err);
       alert("Erro ao enviar comprovante");
@@ -163,14 +222,24 @@ export default function RequestList() {
     <div className="container mx-auto p-4 max-w-full">
       {/* Display de Créditos */}
       <div className="mb-4">
-        <Alert variant="info" className="d-flex align-items-center">
+        <Alert variant="info" className="d-flex align-items-center justify-content-between">
           <i className="ri-wallet-3-line me-2"></i>
           <div>
             <strong>Créditos Disponíveis: {userCredits}</strong>
             <div className="small text-muted" title="Os créditos são utilizados para pagamento de ebooks (1 crédito) e capítulos (1 crédito cada)">
               <i className="ri-information-line me-1"></i>
-              Os créditos são utilizados para pagamento de ebooks (1 crédito) e capítulos (1 crédito cada)
+              Os créditos são utilizados para pagamento de ebooks (1 crédito) e capítulos (1 crédito cada) <br />
+              Atualizar nome da publicação, autores, link e demais informações não consome créditos
             </div>
+          </div>
+          <div>
+            {!paymentStatus ? (
+              <Button size="sm" variant="primary" onClick={() => setShowRechargeModal(true)}>Adicionar Crédito</Button>
+            ) : (
+              <button className="btn btn-link p-0" onClick={() => setShowPaymentStatusModal(true)}>
+                Ver status do pagamento
+              </button>
+            )}
           </div>
         </Alert>
       </div>
@@ -184,6 +253,7 @@ export default function RequestList() {
               <th>Empresa</th>
               <th>Edição</th>
               <th>ISBN</th>
+              <th>Status</th>
               <th>Data de criação</th>
               <th>Ações</th>
             </tr>
@@ -195,6 +265,13 @@ export default function RequestList() {
                 <td>{req.company}</td>
                 <td>{req.edition}</td>
                 <td>{req.isbn ?? "-"}</td>
+                <td>
+                  {req.statusName ? (
+                    <span className="badge bg-info">{req.statusName}</span>
+                  ) : (
+                    <span className="text-muted">—</span>
+                  )}
+                </td>
                 <td>{new Date(req.created_at).toLocaleDateString()}</td>
                 <td>
                   <div className="d-flex flex-wrap gap-2">
@@ -253,7 +330,7 @@ export default function RequestList() {
             <div>
               <Alert variant="success" className="d-flex align-items-center">
                 <i className="ri-check-line me-2"></i>
-                <strong>Créditos suficientes para pagamento!</strong>
+                <strong>Créditos suficientes para registro!</strong>
               </Alert>
               
               <Card className="border-0 bg-light">
@@ -312,8 +389,38 @@ export default function RequestList() {
             Cancelar
           </Button>
           <Button variant="success" onClick={confirmPayment}>
-            Confirmar Pagamento
+            Enviar Registro
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      {/* Modal de Status de Pagamento */}
+      <Modal show={showPaymentStatusModal} onHide={() => setShowPaymentStatusModal(false)} centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Status do pagamento</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          {!paymentStatus ? (
+            <div className="text-muted">Nenhuma solicitação de pagamento encontrada.</div>
+          ) : (
+            <div>
+              <p><strong>Status:</strong> {paymentStatus.status}</p>
+              {paymentStatus.motive ? (<p><strong>Motivo:</strong> {paymentStatus.motive}</p>) : null}
+              {paymentStatus.planCredits ? (
+                <p>
+                  <strong>Plano:</strong> {paymentStatus.planCredits} créditos
+                  {paymentStatus.planPrice != null && !isNaN(Number(paymentStatus.planPrice))
+                    ? ` - R$ ${Number(paymentStatus.planPrice).toFixed(2)}`
+                    : ''}
+                </p>
+              ) : null}
+              <hr />
+              <p className="text-muted mb-0">A análise pode levar até 1 dia útil. Se foi reprovado, provavelmente o envio foi um agendamento e não um comprovante.</p>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer>
+          <Button variant="secondary" onClick={() => setShowPaymentStatusModal(false)}>Fechar</Button>
         </Modal.Footer>
       </Modal>
 
@@ -323,10 +430,9 @@ export default function RequestList() {
           <Modal.Title>Recarregar Créditos</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          {paymentData && (
-            <div>
-              
-              {/* Informações compactas */}
+          <div>
+            {/* Informações compactas, mostradas apenas quando houver contexto de uma documentação */}
+            {paymentData ? (
               <Card className="border-0 bg-light mb-4">
                 <Card.Body className="py-3">
                   <Row className="text-center">
@@ -351,114 +457,141 @@ export default function RequestList() {
                   </Row>
                 </Card.Body>
               </Card>
-              
-              <h5 className="mb-3 text-center">Escolha um plano de recarga:</h5>
-              
-              <Row className="mb-4">
-                <Col md={4}>
-                  <Card className="text-center h-100 border-0 shadow-sm">
-                    <Card.Body className="d-flex flex-column">
-                      <div className="mb-3">
-                        <h4 className="text-primary">20 Créditos</h4>
-                        <div className="text-muted small">R$ 5,00 por crédito</div>
-                        <h3 className="text-primary mb-0">R$ 100,00</h3>
-                      </div>
-                      <div className="mt-auto">
-                        <Button 
-                          variant="outline-primary" 
-                          onClick={() => handleRechargePlan(20)}
-                          className="w-100"
-                        >
-                          <i className="ri-shopping-cart-line me-1"></i>
-                          Recarregar
-                        </Button>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Col>
-                <Col md={4}>
-                  <Card className="text-center h-100 border-success shadow-sm">
-                    <Card.Body className="d-flex flex-column">
-                      <div className="mb-3">
-                        <h4 className="text-success">50 Créditos</h4>
-                        <div className="text-decoration-line-through text-muted small">R$ 250,00</div>
-                        <div className="text-muted small">R$ 4,75 por crédito</div>
-                        <h3 className="text-success mb-0">R$ 237,50</h3>
-                        <div className="small text-success">💰 Economia: R$ 12,50</div>
-                      </div>
-                      <div className="mt-auto">
-                        <Button 
-                          variant="success" 
-                          onClick={() => handleRechargePlan(50)}
-                          className="w-100"
-                        >
-                          <i className="ri-shopping-cart-line me-1"></i>
-                          Recarregar
-                        </Button>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Col>
-                <Col md={4}>
-                  <Card className="text-center h-100 border-warning shadow-sm">
-                    <Card.Body className="d-flex flex-column">
-                      <div className="mb-3">
-                        <h4 className="text-warning">100 Créditos</h4>
-                        <div className="text-decoration-line-through text-muted small">R$ 500,00</div>
-                        <div className="text-muted small">R$ 4,50 por crédito</div>
-                        <h3 className="text-warning mb-0">R$ 450,00</h3>
-                        <div className="small text-warning">💰 Economia: R$ 50,00</div>
-                      </div>
-                      <div className="mt-auto">
-                        <Button 
-                          variant="warning" 
-                          onClick={() => handleRechargePlan(100)}
-                          className="w-100"
-                        >
-                          <i className="ri-shopping-cart-line me-1"></i>
-                          Recarregar
-                        </Button>
-                      </div>
-                    </Card.Body>
-                  </Card>
-                </Col>
-              </Row>
-              
-              <hr />
-              
-              <div className="text-center">
-                <Alert variant="success" className="d-flex align-items-center justify-content-center mb-3">
-                  <i className="ri-information-line me-2"></i>
-                  <strong>Após realizar o pagamento, envie o comprovante para análise e liberação dos créditos</strong>
-                </Alert>
-                
-                <h6 className="mb-3">Enviar Comprovante de Pagamento</h6>
-                <Form.Group className="mb-3">
-                  <Form.Control
-                    type="file"
-                    accept="image/*,.pdf"
-                    onChange={(e) => {
-                      const target = e.target as HTMLInputElement;
-                      setPaymentProof(target.files?.[0] || null);
-                    }}
-                    className="text-center"
-                  />
-                  <Form.Text className="text-muted">
-                    Formatos aceitos: JPG, PNG, PDF (máximo 10MB)
-                  </Form.Text>
-                </Form.Group>
-                <Button 
-                  variant="primary" 
-                  onClick={handlePaymentProofUpload}
-                  disabled={!paymentProof}
-                  size="lg"
-                >
-                  <i className="ri-upload-line me-2"></i>
-                  Enviar Comprovante
-                </Button>
-              </div>
+            ) : null}
+
+            <h5 className="mb-3 text-center">Escolha um plano de recarga:</h5>
+
+            <Row className="mb-4">
+              <Col md={4}>
+                <Card className="text-center h-100 border-0 shadow-sm">
+                  <Card.Body className="d-flex flex-column">
+                    <div className="mb-3">
+                      <h4 className="text-primary">20 Créditos</h4>
+                      <div className="text-muted small">R$ 5,00 por crédito</div>
+                      <h3 className="text-primary mb-0">R$ 100,00</h3>
+                    </div>
+                    <div className="mt-auto">
+                      <Button 
+                        variant="outline-primary" 
+                        onClick={() => handleRechargePlan(20)}
+                        className="w-100"
+                      >
+                        <i className="ri-shopping-cart-line me-1"></i>
+                        Recarregar
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col md={4}>
+                <Card className="text-center h-100 border-success shadow-sm">
+                  <Card.Body className="d-flex flex-column">
+                    <div className="mb-3">
+                      <h4 className="text-success">50 Créditos</h4>
+                      <div className="text-decoration-line-through text-muted small">R$ 250,00</div>
+                      <div className="text-muted small">R$ 4,75 por crédito</div>
+                      <h3 className="text-success mb-0">R$ 237,50</h3>
+                      <div className="small text-success">💰 Economia: R$ 12,50</div>
+                    </div>
+                    <div className="mt-auto">
+                      <Button 
+                        variant="success" 
+                        onClick={() => handleRechargePlan(50)}
+                        className="w-100"
+                      >
+                        <i className="ri-shopping-cart-line me-1"></i>
+                        Recarregar
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Col>
+              <Col md={4}>
+                <Card className="text-center h-100 border-warning shadow-sm">
+                  <Card.Body className="d-flex flex-column">
+                    <div className="mb-3">
+                      <h4 className="text-warning">100 Créditos</h4>
+                      <div className="text-decoration-line-through text-muted small">R$ 500,00</div>
+                      <div className="text-muted small">R$ 4,50 por crédito</div>
+                      <h3 className="text-warning mb-0">R$ 450,00</h3>
+                      <div className="small text-warning">💰 Economia: R$ 50,00</div>
+                    </div>
+                    <div className="mt-auto">
+                      <Button 
+                        variant="warning" 
+                        onClick={() => handleRechargePlan(100)}
+                        className="w-100"
+                      >
+                        <i className="ri-shopping-cart-line me-1"></i>
+                        Recarregar
+                      </Button>
+                    </div>
+                  </Card.Body>
+                </Card>
+              </Col>
+            </Row>
+
+            <hr />
+
+            <Alert variant="success" className="d-flex align-items-center justify-content-center mb-3">
+              <i className="ri-information-line me-2"></i>
+              <strong>Após realizar o pagamento, envie o comprovante para análise e liberação dos créditos</strong>
+            </Alert>
+
+            <Row className="align-items-end g-3 mb-3">
+              <Col md={6}>
+                <div className="d-flex flex-column">
+                  <label className="mb-2"><strong>Plano escolhido</strong></label>
+                  <div className="d-flex align-items-center gap-2">
+                    <Form.Select
+                      value={selectedPlanCredits ?? ''}
+                      onChange={(e) => {
+                        const c = parseInt(e.target.value || '0');
+                        if (!c) { setSelectedPlanCredits(null); setSelectedPlanPrice(null); return; }
+                        const prices: Record<number, number> = { 20: 100, 50: 237.5, 100: 450 };
+                        setSelectedPlanCredits(c);
+                        setSelectedPlanPrice(prices[c]);
+                      }}
+                    >
+                      <option value="">Selecione um plano</option>
+                      <option value="20">20 créditos - R$ 100,00</option>
+                      <option value="50">50 créditos - R$ 237,50</option>
+                      <option value="100">100 créditos - R$ 450,00</option>
+                    </Form.Select>
+                    {selectedPlanCredits ? (
+                      <span className="text-muted">+<strong>{selectedPlanCredits}</strong> créditos</span>
+                    ) : null}
+                  </div>
+                </div>
+              </Col>
+              <Col md={6}>
+                <div className="d-flex flex-column">
+                  <label className="mb-2"><strong>Enviar Comprovante de Pagamento</strong></label>
+                  <Form.Group>
+                    <Form.Control
+                      type="file"
+                      accept="image/*,.pdf"
+                      onChange={(e) => {
+                        const target = e.target as HTMLInputElement;
+                        setPaymentProof(target.files?.[0] || null);
+                      }}
+                    />
+                  </Form.Group>
+                </div>
+              </Col>
+            </Row>
+            <div className="text-center">
+              <Button
+                variant="primary"
+                onClick={handlePaymentProofUpload}
+                disabled={!paymentProof || !selectedPlanCredits}
+                size="lg"
+              >
+                <i className="ri-upload-line me-2"></i>
+                Enviar Comprovante
+              </Button>
             </div>
-          )}
+          </div>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={() => setShowRechargeModal(false)}>

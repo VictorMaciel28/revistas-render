@@ -58,9 +58,10 @@ export default function ChapterListStep() {
       onBack={fromWizard ? () => router.push(`/documentation/chapters/add/${requestId}?fromWizard=true`) : undefined}
       customActions={
         <button
-          className="btn btn-warning ms-2"
+          className="btn btn-success ms-2"
+          onClick={() => router.push(`/documentation/chapters/add/${requestId}`)}
         >
-          Enviar ao crossref
+          Adicionar capítulo
         </button>
       }
     >

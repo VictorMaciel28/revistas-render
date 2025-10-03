@@ -70,6 +70,8 @@ export default function RootLayout({
           crossOrigin="anonymous" 
           referrerPolicy="no-referrer" 
         />
+        {/* Favicon / title icon */}
+        <link rel="icon" href="https://sistema.editorapasteur.com.br/assets/images/logo_blur.jpg" />
       </head>
       <body className={figtree.className}>
         <LanguageProvider>

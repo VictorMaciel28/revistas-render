@@ -43,6 +43,12 @@ export const MENU_ITEMS: MenuItemType[] = [
         parentKey: 'documentation',
       },
       {
+        key: 'awaiting-approval',
+        label: 'Aguardando Aprovação',
+        url: '/documentation/awaiting-approval',
+        parentKey: 'documentation',
+      },
+      {
         key: 'basic',
         label: 'Novo registro',
         url: '/documentation/create',

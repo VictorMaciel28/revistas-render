@@ -382,38 +382,36 @@ model request_status {
   name String @db.VarChar(50)
 }
 
-
 model Documentation {
-  id             String    @id @default(dbgenerated("(UUID())")) @db.VarChar(50)
+  id             String                      @id @default(dbgenerated("(uuid())")) @db.VarChar(50)
   id_depositor   Int
   id_publication Int?
-  title          String    @db.VarChar(255)
-  company        String    @db.VarChar(200)
+  title          String                      @db.VarChar(255)
+  company        String                      @db.VarChar(200)
   edition        Int
-  isbn           String?   @db.VarChar(70)
-  link           String    @db.VarChar(70)
-  abstract       String    @db.TinyText
-  created_at     DateTime  @default(now()) @db.DateTime(0)
-  status         Int       @default(1)
-
-  contributors   DocumentationContribuitor[] @relation("DocumentationContributors")
+  isbn           String?                     @db.VarChar(70)
+  link           String                      @db.VarChar(70)
+  abstract       String                      @db.TinyText
+  created_at     DateTime                    @default(now()) @db.DateTime(0)
+  status         Int                         @default(1)
   chapters       DocumentationChapter[]      @relation("DocumentationChapters")
+  contributors   DocumentationContribuitor[] @relation("DocumentationContributors")
 
   @@map("DOCUMENTATION")
 }
 
 model DocumentationContribuitor {
-  id         Int            @id @default(autoincrement())
-  id_request String         @db.VarChar(50)
-  name       String         @db.VarChar(255)
+  id         Int           @id @default(autoincrement())
+  id_request String        @db.VarChar(50)
+  name       String        @db.VarChar(255)
+  request    Documentation @relation("DocumentationContributors", fields: [id_request], references: [id], onDelete: Cascade)
 
-  request    Documentation  @relation("DocumentationContributors", fields: [id_request], references: [id], onDelete: Cascade)
-
+  @@index([id_request], map: "DOCUMENTATION_CONTRIBUITOR_id_request_fkey")
   @@map("DOCUMENTATION_CONTRIBUITOR")
 }
 
 model DocumentationChapter {
-  id         String                       @id @default(dbgenerated("(UUID())")) @db.VarChar(50)
+  id         String                       @id @default(dbgenerated("(uuid())")) @db.VarChar(50)
   id_request String
   title      String                       @db.VarChar(255)
   link       String                       @db.VarChar(255)
@@ -421,29 +419,29 @@ model DocumentationChapter {
   first_page Int
   last_page  Int
   created_at DateTime                     @default(now()) @db.DateTime(0)
-
-  authors    DocumentationChapterAuthor[] @relation("ChapterAuthors")
   request    Documentation                @relation("DocumentationChapters", fields: [id_request], references: [id])
+  authors    DocumentationChapterAuthor[] @relation("ChapterAuthors")
 
+  @@index([id_request], map: "DOCUMENTATION_CHAPTER_id_request_fkey")
   @@map("DOCUMENTATION_CHAPTER")
 }
 
 model DocumentationChapterAuthor {
-  id         Int                    @id @default(autoincrement())
+  id         Int                  @id @default(autoincrement())
   id_chapter String
-  name       String                  @db.VarChar(255)
-  email      String?                 @db.VarChar(150)
-  instagram  String?                 @db.VarChar(150)
+  name       String               @db.VarChar(255)
+  email      String?              @db.VarChar(150)
+  instagram  String?              @db.VarChar(150)
+  chapter    DocumentationChapter @relation("ChapterAuthors", fields: [id_chapter], references: [id])
 
-  chapter    DocumentationChapter    @relation("ChapterAuthors", fields: [id_chapter], references: [id])
-
+  @@index([id_chapter], map: "DOCUMENTATION_CHAPTER_AUTHOR_id_chapter_fkey")
   @@map("DOCUMENTATION_CHAPTER_AUTHOR")
 }
 
 model UserDocumentationCredit {
-  id      Int @id @default(autoincrement())
-  userId  Int @unique
-  credits Int @default(0)
+  id        Int      @id @default(autoincrement())
+  userId    Int      @unique
+  credits   Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -455,4 +453,20 @@ model DocumentationStatus {
   name String @db.VarChar(50)
 
   @@map("DOCUMENTATION_STATUS")
+}
+
+model DocumentationUserPayment {
+  id          Int      @id @default(autoincrement())
+  userId      Int      @map("user_id")
+  proofPath   String   @db.VarChar(512) @map("proof_path")
+  planCredits Int      @map("plan_credits")
+  planPrice   Decimal  @db.Decimal(10, 2) @map("plan_price")
+  status      String   @db.VarChar(50)
+  motive      String?  @db.VarChar(1024)
+  createdAt   DateTime @default(now()) @db.DateTime(0) @map("created_at")
+  updatedAt   DateTime @updatedAt @db.DateTime(0) @map("updated_at")
+
+  @@map("documentation_user_payment")
+  @@index([userId])
+  @@index([status])
 }

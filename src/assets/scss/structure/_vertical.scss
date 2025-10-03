@@ -22,9 +22,10 @@
           height: $logo-sm-height;
      }
 
-     .logo-lg {
-          height: $logo-lg-height;
-     }
+    .logo-lg {
+         height: calc($logo-lg-height * 1.15); // slightly larger
+         border-radius: 8px; // rounded corners
+    }
 
      .logo-light {
           display: none;
@@ -585,18 +586,14 @@ html[data-menu-size="hidden"] {
 }
 
 // Sidenav Dark and Brand
+// Always show dark logo variant in sidebar regardless of theme
 html[data-bs-theme="dark"],
 html[data-menu-color="dark"],
 html[data-menu-color="brand"] {
      .main-nav {
           .logo-box {
-               .logo-light {
-                    display: block;
-               }
-
-               .logo-dark {
-                    display: none;
-               }
+               .logo-light { display: none; }
+               .logo-dark { display: block; }
           }
      }
 }
