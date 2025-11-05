@@ -394,6 +394,7 @@ model Documentation {
   abstract       String                      @db.TinyText
   created_at     DateTime                    @default(now()) @db.DateTime(0)
   status         Int                         @default(1)
+  price          Decimal?                    @db.Decimal(10, 2)
   chapters       DocumentationChapter[]      @relation("DocumentationChapters")
   contributors   DocumentationContribuitor[] @relation("DocumentationContributors")
 
